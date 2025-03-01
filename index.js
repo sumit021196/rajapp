@@ -1,11 +1,14 @@
 require('dotenv').config();
 const express = require('express');
-const puppeteer = require('puppeteer');
+// Dynamically import puppeteer or puppeteer-core based on environment
+const puppeteer = process.env.NODE_ENV === 'production' 
+    ? require('puppeteer-core')
+    : require('puppeteer');
 const cheerio = require('cheerio');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 // Add middleware to parse JSON
 app.use(express.json());
@@ -48,15 +51,63 @@ const UPDATE_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
 
 // Function to scrape satta main results
 async function scrapeSattaResults() {
+    let browser = null;
     try {
-        const browser = await puppeteer.launch({
+        console.log('Launching browser...');
+        
+        // Determine the Chrome path based on the environment
+        let executablePath;
+        if (process.platform === 'win32') {
+            // Windows path
+            executablePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+        } else {
+            // Linux path
+            executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+        }
+        
+        console.log('Using Chrome executable path:', executablePath);
+        
+        browser = await puppeteer.launch({
             headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--window-size=1280,800'
+            ],
+            executablePath: executablePath,
+            ignoreHTTPSErrors: true,
+            defaultViewport: {
+                width: 1280,
+                height: 800,
+                deviceScaleFactor: 1,
+            }
         });
+        
+        console.log('Browser launched successfully');
+        
+        console.log('Creating new page...');
         const page = await browser.newPage();
         
+        // Set user agent
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+        
+        // Add error handling for navigation
         console.log('Navigating to spboss.in...');
-        await page.goto('https://spboss.in', { waitUntil: 'networkidle0' });
+        try {
+            const response = await page.goto('https://spboss.in', { 
+                waitUntil: ['domcontentloaded', 'networkidle0'],
+                timeout: 60000 // 60 seconds timeout
+            });
+            
+            if (!response || !response.ok()) {
+                throw new Error(`Failed to load the page. Status: ${response ? response.status() : 'unknown'}`);
+            }
+        } catch (navigationError) {
+            console.error('Navigation error:', navigationError);
+            throw new Error('Failed to load the website. Please try again later.');
+        }
         
         console.log('Getting page content...');
         const content = await page.content();
@@ -140,6 +191,16 @@ async function scrapeSattaResults() {
     } catch (error) {
         console.error('Scraping error:', error);
         throw error;
+    } finally {
+        if (browser) {
+            try {
+                console.log('Closing browser...');
+                await browser.close();
+                console.log('Browser closed successfully');
+            } catch (closeError) {
+                console.error('Error closing browser:', closeError);
+            }
+        }
     }
 }
 
@@ -151,7 +212,9 @@ async function performAutoUpdate() {
         console.log('Automatic update completed successfully');
         console.log(`Next update scheduled for: ${nextUpdateTime}`);
     } catch (error) {
-        console.error('Error in automatic update:', error);
+        console.error('Error in automatic update:', error.message);
+        // Add a retry mechanism
+        setTimeout(performAutoUpdate, 5 * 60 * 1000); // Retry after 5 minutes
     }
 }
 
