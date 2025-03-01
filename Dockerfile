@@ -1,4 +1,4 @@
-FROM node:16-slim
+FROM node:18-slim
 
 # Install required dependencies
 RUN apt-get update \
@@ -45,12 +45,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json ./
 
-# Modify package.json for production
-RUN npm uninstall puppeteer && \
-    npm install --save puppeteer-core@21.5.0
-
-# Install production dependencies only
-RUN npm ci --only=production
+# Install production dependencies
+RUN npm install --production
 
 # Copy project files
 COPY . .
