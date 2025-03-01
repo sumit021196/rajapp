@@ -7,6 +7,7 @@ RUN apt-get update \
     gnupg2 \
     apt-transport-https \
     ca-certificates \
+    jq \
     libxss1 \
     libxtst6 \
     libglib2.0-0 \
@@ -42,12 +43,11 @@ RUN google-chrome-stable --version
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package.json ./
 
-# Create production package.json with puppeteer-core
-RUN cat package.json | \
-    jq 'del(.devDependencies) | .dependencies.puppeteer = (.dependencies.puppeteer | sub("puppeteer";"puppeteer-core"))' > package.prod.json && \
-    mv package.prod.json package.json
+# Modify package.json for production
+RUN npm uninstall puppeteer && \
+    npm install --save puppeteer-core@21.5.0
 
 # Install production dependencies only
 RUN npm ci --only=production
