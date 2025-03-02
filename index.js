@@ -49,6 +49,26 @@ let lastUpdateTime = null;
 let nextUpdateTime = null;
 const UPDATE_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
 
+// Define allowed market names
+const ALLOWED_MARKETS = [
+    "KARNATAK DAY",
+    "SRIDEVI",
+    "TIME BAZAR",
+    "MADHUR DAY",
+    "RAJDHANI DAY",
+    "MILAN DAY",
+    "KALYAN",
+    "MAIN BAZAR"
+].map(name => name.toLowerCase());
+
+// Function to check if a market name is in our allowed list
+function isAllowedMarket(marketName) {
+    return ALLOWED_MARKETS.some(allowed => 
+        marketName.toLowerCase().includes(allowed) || 
+        allowed.includes(marketName.toLowerCase())
+    );
+}
+
 // Function to scrape satta main results
 async function scrapeSattaResults() {
     let browser = null;
@@ -126,32 +146,35 @@ async function scrapeSattaResults() {
             // Get the market name from h4
             const marketName = $element.find('h4').text().trim();
             
-            // Get the numbers from span
-            const numberSpan = $element.find('span').text().trim();
-            
-            // Parse the numbers (assuming format like "599-39-568")
-            const numbers = numberSpan.split('-');
-            
-            const resultData = {
-                market_name: marketName,
-                full_number: numberSpan,
-                numbers: {
-                    open: numbers[0] || '',
-                    jodi: numbers[1] || '',
-                    close: numbers[2] || ''
-                },
-                raw_text: $element.text().trim(),
-                position: i + 1,
-                timestamp: new Date().toISOString()
-            };
+            // Only process if it's one of our allowed markets
+            if (marketName && isAllowedMarket(marketName)) {
+                // Get the numbers from span
+                const numberSpan = $element.find('span').text().trim();
+                
+                // Parse the numbers (assuming format like "599-39-568")
+                const numbers = numberSpan.split('-');
+                
+                const resultData = {
+                    market_name: marketName,
+                    full_number: numberSpan,
+                    numbers: {
+                        open: numbers[0] || '',
+                        jodi: numbers[1] || '',
+                        close: numbers[2] || ''
+                    },
+                    raw_text: $element.text().trim(),
+                    position: i + 1,
+                    timestamp: new Date().toISOString()
+                };
 
-            // Only add if we have either market name or numbers
-            if (marketName || numberSpan) {
-                scrapedData.results.push(resultData);
+                // Add to results if we have either market name or numbers
+                if (marketName || numberSpan) {
+                    scrapedData.results.push(resultData);
+                }
             }
         });
 
-        console.log(`Found ${scrapedData.results.length} market results`);
+        console.log(`Found ${scrapedData.results.length} filtered market results`);
         
         await browser.close();
         console.log('Browser closed successfully');
