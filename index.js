@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const authRoutes = require('./auth');
 // Dynamically import puppeteer or puppeteer-core based on environment
 const puppeteer = process.env.NODE_ENV === 'production' 
     ? require('puppeteer-core')
@@ -16,9 +17,47 @@ app.use(express.json());
 // Add CORS middleware
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
     next();
 });
+
+// Authentication middleware
+async function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({
+            success: false,
+            error: 'Authentication required'
+        });
+    }
+
+    try {
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        
+        if (error) throw error;
+        
+        req.user = user;
+        next();
+    } catch (error) {
+        console.error('Auth error:', error);
+        return res.status(403).json({
+            success: false,
+            error: 'Invalid or expired token'
+        });
+    }
+}
+
+// Use auth routes
+app.use('/auth', authRoutes);
+
+// Protect scraping endpoints with authentication
+app.use(['/scrape', '/history'], authenticateToken);
 
 // Basic error handling middleware
 app.use((err, req, res, next) => {
